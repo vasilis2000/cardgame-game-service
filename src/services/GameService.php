@@ -95,95 +95,92 @@ class GameService
         }
 
         $players = $game["players"];
-        if (count($players) !== 2) {
-            throw new Exception('Invalid number of players.');
-        }
-
-        $currentPlayer = null;
-        $opponent = null;
+        $emptyhand = true;
+        $nextUserId = 0;
+        $nextUsername = "";
         foreach ($players as $p) {
             if ((int)$p['user_id'] === $userId) {
-                $currentPlayer = $p;
+                $currentHand = (array)$p['hand'];
+                if (!in_array($card, $currentHand)) {
+                    throw new Exception('You do not have that card.');
+                }
+
+                $index = array_search($card, $currentHand);
+                unset($currentHand[$index]);
+                if (count($currentHand) != 0) {
+                    $emptyhand = false;
+                }
+                $currentHand = array_values($currentHand);
+                $this->repo->updateHand($gameData['_id'], $userId, $currentHand);
+
+                $board = (array)$gameData['board'];
+                $scoreEarned = 0;
+                $cardsTaken = 0;
+
+                $lastCard = end($board);
+                $lastRank = $this->extractRank($lastCard);
+                $playedRank = $this->extractRank($card);
+                $allCards = $board;
+                $allCards[] = $card;
+                if (count($board) > 0 && ($playedRank === 'J' || $playedRank === $lastRank)) {
+                    if (count($board) === 1 && $playedRank === 'J' && $lastRank === 'J') {
+                        $scoreEarned = 20;
+                    } else if (count($board) === 1) {
+                        $scoreEarned = 10;
+                    } else {
+                        $scoreEarned = $this->calculateScore($allCards);
+                    }
+
+                    $cardsTaken = count($allCards);
+
+                    $this->repo->removeBoard($gameData['_id'], $userId);
+                    $this->repo->updateScore($gameData['_id'], $userId, $scoreEarned, $cardsTaken);
+                } else {
+                    $this->repo->updateBoard($gameData['_id'], [$card]);
+                }
             } else {
-                $opponent = $p;
+                $nextUsername = (string)$p['username'];
+                $nextUserId = (int)$p['user_id'];
+                if (count((array)$p['hand']) != 0) {
+                    $emptyhand = false;
+                }
             }
         }
-        if (!$currentPlayer || !$opponent) {
-            throw new Exception('User is not in this game.');
-        }
-
-        $currentHand = (array)$currentPlayer['hand'];
-        $opponentHand = (array)$opponent['hand'];
-        if (!in_array($card, $currentHand)) {
-            throw new Exception('You do not have that card.');
-        }
-
-        $index = array_search($card, $currentHand);
-        unset($currentHand[$index]);
-        $currentHand = array_values($currentHand);
-        $this->repo->updateHand($gameData['_id'], $userId, $currentHand);
-
-        $board = (array)$gameData['board'];
-        $scoreEarned = 0;
-        $cardsTaken = 0;
-
-        $lastCard = end($board);
-        $lastRank = $this->extractRank($lastCard);
-        $playedRank = $this->extractRank($card);
-        $allCards = $board;
-        $allCards[] = $card;
-        if (count($board) > 0 && ($playedRank === 'J' || $playedRank === $lastRank)) {
-            if (count($board) === 1 && $playedRank === 'J' && $lastRank === 'J') {
-                $scoreEarned = 20;
-            } else if (count($board) === 1) {
-                $scoreEarned = 10;
-            } else {
-                $scoreEarned = $this->calculateScore($allCards);
-            }
-
-            $cardsTaken = count($allCards);
-
-            $this->repo->removeBoard($gameData['_id'], $userId);
-        } else {
-            $this->repo->updateBoard($gameData['_id'], [$card]);
-        }
-        $this->repo->updateScore($gameData['_id'], $userId, $scoreEarned, $cardsTaken);
-
-        $currentScore = $gameData['lastcut'] == $currentPlayer["user_id"] ? (int)$currentPlayer['score'] + $scoreEarned + $this->calculateScore($allCards) : (int)$currentPlayer['score'] + $scoreEarned;
-        $currentCardCount = $gameData['lastcut'] == $currentPlayer["user_id"] ? (int)$currentPlayer['cardcount'] + $cardsTaken + count($gameData['board']) : (int)$currentPlayer['cardcount'] + $cardsTaken;
-        $opponentScore = $gameData['lastcut'] == $opponent["user_id"] ? (int)$opponent['score'] + $this->calculateScore($allCards) : (int)$opponent['score'];
-        $opponentCardCount = $gameData['lastcut'] == $opponent["user_id"] ? (int)$opponent['cardcount'] + count($gameData['board']) : (int)$opponent['cardcount'];
-
-        $nextUserId = (int)$opponent['user_id'];
-        $nextUsername = (string)$opponent['username'];
-
-        $currentHandEmpty = empty($currentHand);
-        $opponentHandEmpty = empty($opponentHand);
-
         $deck = (array)$gameData["deck"];
+        $this->repo->updateTurn($gameData['_id'], $nextUserId, $nextUsername);
 
-        if (empty($deck) && $currentHandEmpty && $opponentHandEmpty) {
-            if ($currentCardCount > $opponentCardCount) {
-                $this->repo->updateScore($gameData['_id'], $userId, 3, 0);
-                $currentScore += 3;
-            } elseif ($opponentCardCount > $currentCardCount) {
-                $this->repo->updateScore($gameData['_id'], (int)$opponent['user_id'], 3, 0);
-                $opponentScore += 3;
+        if (empty($deck) && $emptyhand) {
+            $game = $this->repo->getgameWithPlayerid($userId);
+            $winner = 0;
+            $loserid = 0;
+            $maxscore = 0;
+            $cardcount = 0;
+            foreach ($game["players"] as $player) {
+                if ($gameData['lastcut'] == $player["user_id"]) {
+                    $player['score'] += $this->calculateScore((array)$game["board"]);
+                    $player["cardcount"] += count($game["board"]);
+                }
+
+                $flag = false;
+                if ($player["cardcount"] > $cardcount) {
+                    $cardcount = $player["cardcount"];
+                    $flag = true;
+                }
+
+                if ($player['score'] > ($flag ? $maxscore - 3 : $maxscore)) {
+                    $maxscore = $flag ? (int)$player['score'] + 3 : (int)$player['score'];
+                    $winner = $player['user_id'];
+                } else {
+                    $loserid = $player['user_id'];
+                }
             }
-            if ($currentScore >= $opponentScore) {
-                $winnerId = $userId;
-                $loserId = (int)$opponent['user_id'];
-            } else {
-                $winnerId = (int)$opponent['user_id'];
-                $loserId = $userId;
-            }
-            $this->repo->updateWinner($gameData['_id'], $winnerId, $loserId);
+            $this->repo->updateWinner($gameData['_id'], $winner, $loserid);
             $finish =  $this->repo->setgameStatus($gameData['_id'], 'finished');
             if ($finish) {
                 require_once __DIR__ . '/../helpers/RabbitMQPublisher.php';
                 $publisher = new RabbitMQPublisher();
                 try {
-                    $publisher->publishFinshGame( $gameData['roomid'],$winnerId);
+                    $publisher->publishFinshGame($gameData['roomid'], $winner);
                     ResponseHelper::sendResponse(200, ['message' => 'Room started successfully.']);
                 } catch (Exception $e) {
                     $this->repo->setgameStatus($gameData['_id'], 'waiting');
@@ -201,15 +198,13 @@ class GameService
                 'message'   => 'Game finished.'
             ];
         }
-
-        if ($currentHandEmpty && $opponentHandEmpty) {
+        if ($emptyhand) {
             if (!empty($deck)) {
-                $hand1 = array_splice($deck, 0, 6);
-                $hand2 = array_splice($deck, 0, 6);
-                $this->repo->updateHand($gameId, $userId, $hand1);
-                $this->repo->updateHand($gameId, (int)$opponent['user_id'], $hand2);
+                foreach ($players as $p) {
+                    $hand = array_splice($deck, 0, 6);
+                    $this->repo->updateHand($gameId, $p['user_id'], $hand);
+                }
                 $this->repo->updateDeck($gameId, $deck);
-                $this->repo->updateTurn($gameData['_id'], $nextUserId, $nextUsername);
                 return [
                     'game_over' => false,
                     'next_turn' => $nextUserId,
@@ -217,14 +212,9 @@ class GameService
                 ];
             }
         }
-
-        $this->repo->updateTurn($gameData['_id'], $nextUserId, $nextUsername);
-
         return [
             'game_over' => false,
             'next_turn' => $nextUserId,
-            'score_earned' => $scoreEarned,
-            'cards_taken' => $cardsTaken
         ];
     }
 
