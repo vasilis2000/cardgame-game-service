@@ -21,25 +21,25 @@ class RabbitMQPublisher
         try {
             $this->connection = new AMQPStreamConnection($host, $port, $user, $pass);
             $this->channel = $this->connection->channel();
-            $this->channel->queue_declare('start_game_queue', false, true, false, false);
+            $this->channel->queue_declare('finish_game_queue', false, true, false, false);
         } catch (\Exception $e) {
             error_log('RabbitMQ connection failed: ' . $e->getMessage());
             throw $e;
         }
     }
 
-    public function publishStartGame(array $players, string $roomid): void
+    public function publishFinshGame( string $roomid ,string $winner): void
     {
         $message = new AMQPMessage(
             json_encode([
-                'roomid'  => $roomid,
-                'players' => $players
+                'room_id'  => $roomid,
+                'winner' => $winner
             ]),
             ['delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT]
         );
 
         try {
-            $this->channel->basic_publish($message, '', 'start_game_queue');
+            $this->channel->basic_publish($message, '', 'finish_game_queue');
         } catch (\Exception $e) {
             error_log('RabbitMQ publish failed: ' . $e->getMessage());
             throw $e;

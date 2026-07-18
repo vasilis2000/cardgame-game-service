@@ -13,7 +13,7 @@ $user = Config::getString('RABBITMQ_USER');
 $pass = Config::getString('RABBITMQ_PASS');
 
 $baseUrl = rtrim(Config::getString('SERVER_BASE_URL'), '/');
-$startGameUrl = $baseUrl . '/game/start';
+$FinishGameUrl = 'http://host.docker.internal:8082/room/finish';
 
 function connectWithRetry($host, $port, $user, $pass, $maxAttempts = 30, $sleep = 3) {
     for ($i = 1; $i <= $maxAttempts; $i++) {
@@ -32,11 +32,11 @@ function connectWithRetry($host, $port, $user, $pass, $maxAttempts = 30, $sleep 
     }
 }
 
-function callStartGameEndpoint($roomId, $players) {
-    global $startGameUrl;
-    $payload = json_encode(['roomid' => $roomId, 'players' => $players]);
+function callFinishGameEndpoint($room_id, $winner) {
+    global $FinishGameUrl;
+    $payload = json_encode(['room_id' => $room_id, 'winner' => $winner]);
 
-    $ch = curl_init($startGameUrl);
+    $ch = curl_init($FinishGameUrl);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
@@ -54,10 +54,10 @@ function callStartGameEndpoint($roomId, $players) {
     }
 
     if ($httpCode >= 200 && $httpCode < 300) {
-        echo " [✓] Game start triggered successfully (HTTP $httpCode)\n";
+        echo " [✓] Game Finish triggered successfully (HTTP $httpCode)\n";
         return true;
     } else {
-        echo " [✗] Game start failed with HTTP $httpCode, response: $response\n";
+        echo " [✗] Game Finish failed with HTTP $httpCode, response: $response\n";
         return false;
     }
 }
@@ -68,24 +68,24 @@ function consume() {
     try {
         $connection = connectWithRetry($host, $port, $user, $pass);
         $channel = $connection->channel();
-        $channel->queue_declare('start_game_queue', false, true, false, false);
+        $channel->queue_declare('finish_game_queue', false, true, false, false);
 
-        echo " [*] Waiting for start game messages. To exit press CTRL+C\n";
+        echo " [*] Waiting for Finish game messages. To exit press CTRL+C\n";
 
         $callback = function (AMQPMessage $msg) {
             $data = json_decode($msg->body, true);
-            $roomId = $data['roomid'] ?? null;  
-            $players = $data['players'] ?? [];
+            $room_id = $data['room_id'] ?? null;  
+            $winner = $data['winner'] ?? null;
 
-            if (!$roomId) {
-                echo " [x] Invalid message: missing roomid, rejecting\n";
+            if (!$room_id) {
+                echo " [x] Invalid message: missing room_id, rejecting\n";
                 $msg->nack(false, false); 
                 return;
             }
 
-            echo " [x] Received start game request for room $roomId\n";
+            echo " [x] Received Finish game request for room $room_id\n";
 
-            $success = callStartGameEndpoint($roomId, $players);
+            $success = callFinishGameEndpoint($room_id, $winner);
 
             if ($success) {
                 $msg->ack();
@@ -97,7 +97,7 @@ function consume() {
         };
 
         $channel->basic_qos(null, 1, null);
-        $channel->basic_consume('start_game_queue', '', false, false, false, false, $callback);
+        $channel->basic_consume('finish_game_queue', '', false, false, false, false, $callback);
 
         while ($channel->is_consuming()) {
             try {

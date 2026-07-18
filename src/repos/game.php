@@ -55,6 +55,7 @@ class GameStateRepository
             'winner'     => '',
             'status'     => 'playing',
             'players'    => $players,
+            'lastcut'    => '',
             'player_turn' => $players[0]["user_id"],
             'player_turnnname' => $players[0]["username"],
             'created_at' => new UTCDateTime(),
@@ -148,11 +149,14 @@ class GameStateRepository
         $this->deleteAvailablegamesCache();
     }
 
-    public function removeBoard(object $gameid): void
-    {
-        $this->games->updateOne(['_id' => $gameid], ['$set' => ['board' => []]]);
-        $this->deletegameCache($gameid);
-    }
+  public function removeBoard(object $gameid, int $lastcut): void
+{
+    $this->games->updateOne(
+        ['_id' => $gameid],
+        ['$set' => ['board' => [], 'lastcut' => $lastcut]]
+    );
+    $this->deletegameCache($gameid);
+}
 
     public function updateBoard(object $gameid, array $board): void
     {
@@ -169,10 +173,17 @@ class GameStateRepository
         $this->games->updateOne(['_id' => $gameid], ['$set' => ['deck' => $deck]]);
         $this->deletegameCache($gameid);
     }
-    public function setgameStatus(object $gameid, string $status): void
+    public function setgameStatus(object $gameid, string $status): bool
     {
-        $this->games->updateOne(['_id' => $gameid], ['$set' => ['status' => $status]]);
-        $this->deletegameCache($gameid);
-        $this->deleteAvailablegamesCache();
+        $result =$this->games->updateOne(['_id' => $gameid], ['$set' => ['status' => $status]]);
+        $success = $result->getModifiedCount() > 0;
+
+        if ($success) {
+           $this->deletegameCache($gameid);
+             $this->deleteAvailablegamesCache();
+        }
+
+        return $success;
+       
     }
 }

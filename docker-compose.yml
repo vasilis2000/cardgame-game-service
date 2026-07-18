@@ -64,7 +64,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: ${JWT_EXPIRY}
     working_dir: /var/www/html
-    command: php bin/start_game_worker.php   
+    command: php bin/finish_game_queue.php   
     depends_on:
       - rabbitmq
       - redis

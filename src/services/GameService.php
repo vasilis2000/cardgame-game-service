@@ -65,18 +65,18 @@ class GameService
         $this->repo = $repo;
     }
 
-    public function startGame(array $players,string $roomid): void
+    public function startGame(array $players, string $roomid): void
     {
         $deck = self::DECK;
         shuffle($deck);
-        
+
         $board = array_splice($deck, 0, 4);
         foreach ($players as $k => $p) {
             $players[$k]['hand'] = array_splice($deck, 0, 6);
             $players[$k]['score'] = 0;
             $players[$k]['cardcount'] = 0;
         }
-         $this->repo->create($players,$board,$deck, $roomid);
+        $this->repo->create($players, $board, $deck, $roomid);
     }
 
     public function playCard(object $gameId, int $userId, string $card, string $username): array
@@ -130,10 +130,9 @@ class GameService
         $lastCard = end($board);
         $lastRank = $this->extractRank($lastCard);
         $playedRank = $this->extractRank($card);
-
+        $allCards = $board;
+        $allCards[] = $card;
         if (count($board) > 0 && ($playedRank === 'J' || $playedRank === $lastRank)) {
-            $allCards = $board;
-            $allCards[] = $card;
             if (count($board) === 1 && $playedRank === 'J' && $lastRank === 'J') {
                 $scoreEarned = 20;
             } else if (count($board) === 1) {
@@ -144,16 +143,16 @@ class GameService
 
             $cardsTaken = count($allCards);
 
-            $this->repo->removeBoard($gameData['_id']);
+            $this->repo->removeBoard($gameData['_id'], $userId);
         } else {
             $this->repo->updateBoard($gameData['_id'], [$card]);
         }
         $this->repo->updateScore($gameData['_id'], $userId, $scoreEarned, $cardsTaken);
 
-        $currentScore = (int)$currentPlayer['score'] + $scoreEarned;
-        $currentCardCount = (int)$currentPlayer['cardcount'] + $cardsTaken;
-        $opponentScore = (int)$opponent['score'];
-        $opponentCardCount = (int)$opponent['cardcount'];
+        $currentScore = $gameData['lastcut'] == $currentPlayer["user_id"] ? (int)$currentPlayer['score'] + $scoreEarned + $this->calculateScore($allCards) : (int)$currentPlayer['score'] + $scoreEarned;
+        $currentCardCount = $gameData['lastcut'] == $currentPlayer["user_id"] ? (int)$currentPlayer['cardcount'] + $cardsTaken + count($gameData['board']) : (int)$currentPlayer['cardcount'] + $cardsTaken;
+        $opponentScore = $gameData['lastcut'] == $opponent["user_id"] ? (int)$opponent['score'] + $this->calculateScore($allCards) : (int)$opponent['score'];
+        $opponentCardCount = $gameData['lastcut'] == $opponent["user_id"] ? (int)$opponent['cardcount'] + count($gameData['board']) : (int)$opponent['cardcount'];
 
         $nextUserId = (int)$opponent['user_id'];
         $nextUsername = (string)$opponent['username'];
@@ -179,9 +178,23 @@ class GameService
                 $loserId = $userId;
             }
             $this->repo->updateWinner($gameData['_id'], $winnerId, $loserId);
-            //rabbit sta rooms finsh kai na dinei tis kartes pou einai idi kato sto auto mou ekoce telefteafora
-            $this->repo->setgameStatus($gameData['_id'], 'finished');
-
+            $finish =  $this->repo->setgameStatus($gameData['_id'], 'finished');
+            if ($finish) {
+                require_once __DIR__ . '/../helpers/RabbitMQPublisher.php';
+                $publisher = new RabbitMQPublisher();
+                try {
+                    $publisher->publishFinshGame( $gameData['roomid'],$winnerId);
+                    ResponseHelper::sendResponse(200, ['message' => 'Room started successfully.']);
+                } catch (Exception $e) {
+                    $this->repo->setgameStatus($gameData['_id'], 'waiting');
+                    error_log(sprintf(
+                        'Failed to publish start game for room %s: %s',
+                        $roomId,
+                        $e->getMessage()
+                    ));
+                    ResponseHelper::sendResponse(500, ['message' => 'Could not start game, please retry.']);
+                }
+            }
             return [
                 'game_over' => true,
                 'winner_id' => $winnerId,
