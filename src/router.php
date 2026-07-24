@@ -8,13 +8,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
-
 require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/helpers/Config.php';
-require_once __DIR__ . '/controllers/game.php';
-require_once __DIR__ . '/helpers/AuthHelper.php';
-require_once __DIR__ . '/helpers/JwtHelper.php';
-require_once __DIR__ . '/helpers/ResponseHelper.php';
+
+use App\Controllers\GameController;
+use App\Helpers\ResponseHelper;
+use App\Repositories\GameRepository;
+use App\Services\GameService;
+use App\Helpers\RabbitMQPublisher;
 
 try {
     $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -24,8 +24,11 @@ try {
     $resource = $segments[0] ?? '';
     $action   = $segments[1] ?? null;
     $method   = $_SERVER['REQUEST_METHOD'];
-    Config::load();
-    $gameController = new GameController();
+   
+    $gameRepo = new GameRepository();
+    $rabbitMQ = new RabbitMQPublisher();
+    $gameService = new GameService($gameRepo, $rabbitMQ);
+    $gameController = new GameController($gameService);
 
     switch ($resource) {
         case 'game':

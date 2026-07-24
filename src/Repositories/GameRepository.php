@@ -1,12 +1,14 @@
 <?php
-require_once __DIR__ . '/../helpers/MongoDB.php';
-require_once __DIR__ . '/../helpers/RedisConnection.php';
+declare(strict_types=1);
 
+namespace App\Repositories;
+use App\Helpers\MongoDBConnection;
+use App\Helpers\RedisConnection;
 use Predis\Client;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\UTCDateTime;
-
-class GameStateRepository
+use Exception;
+class GameRepository
 {
     private \MongoDB\Database $db;
     private \MongoDB\Collection $games;
@@ -83,23 +85,6 @@ class GameStateRepository
         }
 
         return $game;
-    }
-
-    public function getHands(object $gameid): ?array
-    {
-        $game = $this->games->findOne(['_id' => $gameid]);
-        if (!$game) return null;
-        $hands = [];
-        foreach ($game['players'] as $p) {
-            $hands[] = [
-                'user_id' => $p['user_id'],
-                'username' => $p['username'],
-                'hand' => $p['hand'],
-                'score' => $p['score'],
-                'cardcount' => $p['cardcount']
-            ];
-        }
-        return $hands;
     }
 
     public function updateHand(object $gameid, int $userId, array $hand): void

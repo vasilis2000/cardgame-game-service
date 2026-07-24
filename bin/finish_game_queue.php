@@ -1,18 +1,41 @@
 #!/usr/bin/env php
 <?php
+declare(strict_types=1);
 
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/../src/helpers/Config.php';
+
+$projectRoot = realpath(__DIR__ . '/..');
+if ($projectRoot === false) {
+    fwrite(STDERR, "❌ Unable to determine project root.\n");
+    exit(1);
+}
+
+$autoloadPath = $projectRoot . '/vendor/autoload.php';
+if (!file_exists($autoloadPath)) {
+    fwrite(STDERR, "❌ Composer autoloader not found at $autoloadPath\n");
+    exit(1);
+}
+require_once $autoloadPath;
+
+
+$envFile = $projectRoot . '/.env';
+if (file_exists($envFile)) {
+    try {
+        $dotenv = \Dotenv\Dotenv::createImmutable($projectRoot);
+        $dotenv->load();
+        echo "✓ .env loaded from $projectRoot\n";
+    } catch (\Exception $e) {
+        fwrite(STDERR, "⚠️ Failed to load .env: " . $e->getMessage() . "\n");
+    }
+} else {
+    fwrite(STDERR, "⚠️ No .env file found – relying on existing environment variables.\n");
+}
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPIOException;
- Config::load();
-$host = Config::getString('RABBITMQ_HOST');
-$port = Config::getString('RABBITMQ_PORT');
-$user = Config::getString('RABBITMQ_USER');
-$pass = Config::getString('RABBITMQ_PASS');
-
-$baseUrl = rtrim(Config::getString('SERVER_BASE_URL'), '/');
+$host = getenv('RABBITMQ_HOST') ?: 'localhost';
+$port = (int)(getenv('RABBITMQ_PORT') ?: 5673);
+$user = getenv('RABBITMQ_USER') ?: 'guest';
+$pass = getenv('RABBITMQ_PASS') ?: 'guest';
 $FinishGameUrl = 'http://host.docker.internal:8082/room/finish';
 
 function connectWithRetry($host, $port, $user, $pass, $maxAttempts = 30, $sleep = 3) {
@@ -97,7 +120,7 @@ function consume() {
         };
 
         $channel->basic_qos(null, 1, null);
-        $channel->basic_consume('finish_game_queue', '', false, false, false, false, $callback);
+        $channel->basic_consume('game_finish_queue', '', false, false, false, false, $callback);
 
         while ($channel->is_consuming()) {
             try {
