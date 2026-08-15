@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Services;
@@ -7,7 +8,7 @@ use App\Repositories\GameRepository;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\BadRequestException;
 use App\Exceptions\ValidationException;
-use App\Helpers\RabbitMQPublisher;
+use App\Utilities\RabbitMQPublisher;
 use App\Exceptions\InternalServerException;
 use Exception;
 
@@ -84,10 +85,13 @@ class GameService
         shuffle($deck);
 
         $board = array_splice($deck, 0, 4);
+        $number = 1;
         foreach ($players as $k => $p) {
             $players[$k]['hand'] = array_splice($deck, 0, 6);
             $players[$k]['score'] = 0;
             $players[$k]['cardcount'] = 0;
+            $players[$k]['turn'] = $number;
+            $number++;
         }
         try {
             $this->repo->create($players, $board, $deck, $roomid);
@@ -184,13 +188,12 @@ class GameService
                 $board = (array)$gameData['board'];
                 $scoreEarned = 0;
                 $cardsTaken = 0;
-                $lastRank="";
+                $lastRank = "";
                 $lastCard = end($board);
-                if(!empty($lastCard))
-                    {
-                $lastRank = $this->extractRank($lastCard);
-                    }
-               
+                if (!empty($lastCard)) {
+                    $lastRank = $this->extractRank($lastCard);
+                }
+
                 $playedRank = $this->extractRank($card);
                 $allCards = $board;
                 $allCards[] = $card;
@@ -243,7 +246,7 @@ class GameService
             $cardcount = 0;
 
             foreach ($game["players"] as $player) {
-                if ($gameData['lastcut'] == $player["user_id"]) {
+                if ($game['lastcut'] == $player["user_id"]) {
                     $player['score'] += $this->calculateScore((array)$game["board"]);
                     $player["cardcount"] += count($game["board"]);
                 }
@@ -257,11 +260,11 @@ class GameService
                 if ($player['score'] > ($flag ? $maxscore - 3 : $maxscore)) {
                     $maxscore = $flag ? (int)$player['score'] + 3 : (int)$player['score'];
                     $winner = $player['user_id'];
-                } 
+                }
             }
 
             try {
-                $this->repo->updateWinner($gameData['_id'], $winner, 0); 
+                $this->repo->updateWinner($gameData['_id'], $winner, 0);
                 $this->repo->setgameStatus($gameData['_id'], 'finished');
             } catch (Exception $e) {
                 throw new InternalServerException('Failed to finalize game: ' . $e->getMessage());

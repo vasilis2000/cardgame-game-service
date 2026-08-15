@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Helpers\ResponseHelper;
-use App\Helpers\AuthHelper;
+use App\Utilities\ResponseHelper;
+use App\Utilities\AuthHelper;
 use App\Services\GameService;
 use App\Exceptions\HttpException;
 use Exception;

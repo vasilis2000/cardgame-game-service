@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 namespace App\Repositories;
-use App\Helpers\MongoDBConnection;
-use App\Helpers\RedisConnection;
+use App\Utilities\MongoDBConnection;
+use App\Utilities\RedisConnection;
 use Predis\Client;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\UTCDateTime;
@@ -57,6 +57,7 @@ class GameRepository
             'winner'     => '',
             'status'     => 'playing',
             'players'    => $players,
+            'players_count'    => count($players),
             'lastcut'    => '',
             'player_turn' => $players[0]["user_id"],
             'player_turnnname' => $players[0]["username"],
