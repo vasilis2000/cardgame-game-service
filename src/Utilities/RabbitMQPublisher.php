@@ -30,7 +30,7 @@ class RabbitMQPublisher
         }
     }
 
-    public function publishFinishGame( string $roomid ,string $winner): void
+    public function publishFinishGame( string $roomid ,int $winner): void
     {
         $message = new AMQPMessage(
            json_encode([
