@@ -1,13 +1,14 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Utilities\ResponseHelper;
 use App\Utilities\AuthHelper;
 use App\Services\GameService;
 use App\Exceptions\HttpException;
 use Exception;
+use App\Http\Response;
 
 class GameController
 {
@@ -23,12 +24,12 @@ class GameController
         try {
             $user = AuthHelper::getAuthenticatedUser();
             $result = $this->gameService->getGameViewData($user['user_id']);
-            ResponseHelper::sendResponse(200, $result);
+            Response::json(200, $result);
         } catch (HttpException $e) {
-            ResponseHelper::sendResponse($e->getStatusCode(), ['message' => $e->getMessage()]);
+            Response::error($e->getStatusCode(), $e->getMessage());
         } catch (Exception $e) {
             error_log('Unexpected error in view: ' . $e->getMessage());
-            ResponseHelper::sendResponse(500, ['message' => 'An internal error occurred.']);
+            Response::error(500, 'An internal error occurred.');
         }
     }
 
@@ -37,12 +38,12 @@ class GameController
         try {
             $user = AuthHelper::getAuthenticatedUser();
             $isTurn = $this->gameService->isUserTurn($user['user_id']);
-            ResponseHelper::sendResponse(200, ['turn' => $isTurn]);
+            Response::json(200, ['turn' => $isTurn]);
         } catch (HttpException $e) {
-            ResponseHelper::sendResponse($e->getStatusCode(), ['message' => $e->getMessage()]);
+            Response::error($e->getStatusCode(), $e->getMessage());
         } catch (Exception $e) {
             error_log('Unexpected error in getTurn: ' . $e->getMessage());
-            ResponseHelper::sendResponse(500, ['message' => 'An internal error occurred.']);
+            Response::error(500, 'An internal error occurred.');
         }
     }
 
@@ -50,17 +51,17 @@ class GameController
     {
         try {
             if (empty($data['getselected'])) {
-                ResponseHelper::sendResponse(422, ['message' => 'Card ID is required.']);
+                Response::error(422, 'Card ID is required.');
                 return;
             }
             $user = AuthHelper::getAuthenticatedUser();
             $result = $this->gameService->playCard($user['user_id'], $data['getselected']);
-            ResponseHelper::sendResponse(200, $result);
+            Response::json(200, $result);
         } catch (HttpException $e) {
-            ResponseHelper::sendResponse($e->getStatusCode(), ['message' => $e->getMessage()]);
+            Response::error($e->getStatusCode(), $e->getMessage());
         } catch (Exception $e) {
             error_log('Unexpected error in playCard: ' . $e->getMessage());
-            ResponseHelper::sendResponse(500, ['message' => 'An internal error occurred.']);
+            Response::error(500, 'An internal error occurred.');
         }
     }
 
@@ -68,20 +69,20 @@ class GameController
     {
         try {
             if (empty($data['players'])) {
-                ResponseHelper::sendResponse(422, ['message' => 'players is required.']);
+                Response::error(422, 'players is required.');
                 return;
             }
             if (empty($data['roomid'])) {
-                ResponseHelper::sendResponse(422, ['message' => 'roomid is required.']);
+                Response::error(422, 'roomid is required.');
                 return;
             }
             $this->gameService->startGame($data['players'], $data['roomid']);
-            ResponseHelper::sendResponse(200, ['message' => 'game started']);
+            Response::json(200, ['game started']);
         } catch (HttpException $e) {
-            ResponseHelper::sendResponse($e->getStatusCode(), ['message' => $e->getMessage()]);
+            Response::error($e->getStatusCode(), $e->getMessage());
         } catch (Exception $e) {
             error_log('Unexpected error in startGame: ' . $e->getMessage());
-            ResponseHelper::sendResponse(500, ['message' => 'An internal error occurred.']);
+            Response::error(500, 'An internal error occurred.');
         }
     }
 }
