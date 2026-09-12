@@ -1,43 +1,8 @@
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: redis_cache2
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: rabbitmq2
-    ports:
-      - "5673:5672"
-      - "15673:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   web:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-      args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
     container_name: php_web2
     ports:
       - "8083:80"
@@ -46,50 +11,36 @@ services:
     environment:
       MONGO_URI: ${MONGO_URI}
       MONGO_DB: ${MONGO_DB}
-      REDIS_URL: ${REDIS_URL}
-      RABBITMQ_HOST: rabbitmq
+      REDIS_URL: redis://host.docker.internal:6379
+      RABBITMQ_HOST: host.docker.internal   
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: ${JWT_EXPIRY}
-      SERVER_BASE_URL: "http://web:80"
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
-  worker:
+  game_start_consumer:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-      args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
-    container_name: php_worker2
+    container_name: php_game_consumer
     volumes:
       - .:/var/www/html
     environment:
       MONGO_URI: ${MONGO_URI}
       MONGO_DB: ${MONGO_DB}
-      REDIS_URL: ${REDIS_URL}
-      RABBITMQ_HOST: rabbitmq
+      REDIS_URL: redis://host.docker.internal:6379
+      RABBITMQ_HOST: host.docker.internal
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: ${JWT_EXPIRY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     working_dir: /var/www/html
-    command: php bin/finish_game_queue.php
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    command: php bin/start_game_consumer.php
     restart: unless-stopped
-
-volumes:
-  redis_data:
-  rabbitmq_data:
